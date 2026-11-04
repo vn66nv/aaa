@@ -19,9 +19,10 @@
 <div id="map"></div>
 
 <header class="top">
-  <div class="brand">Kunsabai <small>карта постов · Таиланд</small></div>
+  <div class="brand">Kunsabai <small data-i18n="subtitle">карта постов · Таиланд</small></div>
   <form id="search" autocomplete="off">
-    <input id="q" type="search" placeholder="Поиск места в Таиланде" enterkeyhint="search">
+    <input id="q" type="search" placeholder="Поиск места в Таиланде" data-i18n-ph="search" enterkeyhint="search">
+    <ul id="sug" class="sug" hidden></ul>
   </form>
   <div id="filters" class="chips"></div>
 </header>
@@ -38,47 +39,47 @@
 <!-- нижняя панель отметки (как в ГдеДПС) -->
 <section id="sheet" class="sheet" hidden>
   <div class="srow" id="sNote"><i>💬</i><span></span></div>
-  <div class="srow"><i>👤</i><span><b>Автор:</b> <span id="sAuthor"></span></span></div>
-  <div class="srow"><i>👁</i><span><b>Подтверждено:</b> <span id="sSeen"></span></span></div>
-  <div class="srow" id="sGoneRow"><i>🙈</i><span><b>Сообщили что уже нет:</b> <span id="sGone"></span></span></div>
-  <div class="srow"><i>🕐</i><span><b>Добавлено:</b> <span id="sAdded"></span></span></div>
+  <div class="srow"><i>👤</i><span><b data-i18n="author">Автор:</b> <span id="sAuthor"></span></span></div>
+  <div class="srow"><i>👁</i><span><b data-i18n="confirmed">Подтверждено:</b> <span id="sSeen"></span></span></div>
+  <div class="srow" id="sGoneRow"><i>🙈</i><span><b data-i18n="gone">Сообщили что уже нет:</b> <span id="sGone"></span></span></div>
+  <div class="srow"><i>🕐</i><span><b data-i18n="added">Добавлено:</b> <span id="sAdded"></span></span></div>
   <div class="react">
     <button id="rYes" class="rbtn"><div class="big"><span class="ic ok">✔</span> <span class="cnt"></span></div><div class="who"></div></button>
     <button id="rNo" class="rbtn"><div class="big"><span class="ic no">✖</span> <span class="cnt"></span></div><div class="who"></div></button>
   </div>
-  <button id="sDel" class="del" hidden>Удалить мою метку</button>
+  <button id="sDel" class="del" hidden data-i18n="del">Удалить мою метку</button>
 </section>
 
 <!-- вход -->
 <dialog id="authDlg">
   <form method="dialog" id="authForm">
     <h3>Kunsabai</h3>
-    <p>Авторизуйтесь, чтобы оставлять реакции к меткам</p>
-    <label>Ваше имя
-      <input id="nick" maxlength="20" placeholder="например: Олег">
+    <p data-i18n="auth">Авторизуйтесь, чтобы оставлять реакции к меткам</p>
+    <label><span data-i18n="name">Ваше имя</span>
+      <input id="nick" maxlength="20" placeholder="например: Олег" data-i18n-ph="name_ph">
     </label>
-    <label id="emailRow" hidden>E-mail
+    <label id="emailRow" hidden><span data-i18n="email">E-mail</span>
       <input id="email" type="email" autocomplete="email" placeholder="you@example.com">
     </label>
-    <label id="codeRow" hidden>Код из письма
+    <label id="codeRow" hidden><span data-i18n="code">Код из письма</span>
       <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="123456">
     </label>
-    <div class="row"><button class="btn" value="cancel">Отмена</button><button id="authOk" class="btn btn-main" value="ok">Войти</button></div>
+    <div class="row"><button class="btn" value="cancel" data-i18n="cancel">Отмена</button><button id="authOk" class="btn btn-main" value="ok">Войти</button></div>
   </form>
 </dialog>
 
 <!-- добавление отметки -->
 <dialog id="addDlg">
   <form method="dialog" id="addForm">
-    <h3>Что отметить?</h3>
+    <h3 data-i18n="what">Что отметить?</h3>
     <div id="typeGrid" class="types"></div>
-    <label>Комментарий (необязательно)
-      <input id="note" maxlength="140" placeholder="например: у заправки, в сторону Пхукета">
+    <label><span data-i18n="note">Комментарий (необязательно)</span>
+      <input id="note" maxlength="140" placeholder="например: у заправки, в сторону Пхукета" data-i18n-ph="note_ph">
     </label>
-    <p class="hint">Отметка встанет на вашу текущую позицию. Нет GPS — тапните по карте, затем «＋».</p>
+    <p class="hint" data-i18n="hint">Отметка встанет на вашу текущую позицию. Нет GPS — тапните по карте, затем «＋».</p>
     <div class="row">
-      <button value="cancel" class="btn">Отмена</button>
-      <button id="addOk" value="ok" class="btn btn-main">Поставить</button>
+      <button value="cancel" class="btn" data-i18n="cancel">Отмена</button>
+      <button id="addOk" value="ok" class="btn btn-main" data-i18n="place">Поставить</button>
     </div>
   </form>
 </dialog>
@@ -86,16 +87,17 @@
 <!-- подсказка установки -->
 <dialog id="installDlg">
   <form method="dialog">
-    <h3>Установить на экран «Домой»</h3>
+    <h3 data-i18n="installTitle">Установить на экран «Домой»</h3>
     <p id="installText"></p>
-    <div class="row"><button class="btn btn-main" value="ok">Понятно</button></div>
+    <div class="row"><button class="btn btn-main" value="ok" data-i18n="gotIt">Понятно</button></div>
   </form>
 </dialog>
 
-<button id="install" class="install" hidden>Установить приложение</button>
+<button id="install" class="install" hidden data-i18n="install">Установить приложение</button>
 
 <script src="vendor/leaflet.js"></script>
 <script src="config.js"></script>
+<script src="i18n.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -8,7 +8,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? "✔ " : "✘ ") + m); if
 (async () => {
   await new Promise(r => srv.listen(0, r)); const base = `http://localhost:${srv.address().port}`;
   const b = await chromium.launch();
-  const ctx = await b.newContext({ viewport: { width: 390, height: 800 }, geolocation: { latitude: 13.7563, longitude: 100.5018 }, permissions: ["geolocation"], serviceWorkers: "block" });
+  const ctx = await b.newContext({ locale: "ru-RU", viewport: { width: 390, height: 800 }, geolocation: { latitude: 13.7563, longitude: 100.5018 }, permissions: ["geolocation"], serviceWorkers: "block" });
   await ctx.route(/tile\.openstreetmap|nominatim/, r => r.abort());
   await ctx.route(`${base}/config.js`, r => r.fulfill({ contentType: "text/javascript", body: `window.KUNSABAI={SUPABASE_URL:"https://demo.supabase.co",SUPABASE_ANON_KEY:"ANON",TTL_HOURS:3,HIDE_AFTER_HOURS:12,ALERT_RADIUS_M:500,CLUSTER_BELOW_ZOOM:11};` }));
   const db = { marks: [], log: [] };

@@ -1,8 +1,12 @@
 (() => {
   const C = window.KUNSABAI;
+  // ---------- язык ----------
+  const LANGS = ["ru", "en", "th"];
+  let lang = (() => { try { const s = localStorage.getItem("kunsabai.lang"); if (LANGS.includes(s)) return s; } catch {} const n = (navigator.language || "ru").slice(0, 2); return LANGS.includes(n) ? n : "ru"; })();
+  const t = (k, ...v) => (I18N[lang][k] ?? I18N.ru[k] ?? k).replace(/\{(\d)\}/g, (_, i) => v[i]);
   const TYPES = {
-    dps:  { label: "ДПС",     text: "ДПС", cls: "dps" },
-    warn: { label: "Внимание", text: "!",  cls: "warn" }
+    dps:  { label: () => t("t_dps"), text: () => t("f_dps"), cls: "dps" },
+    warn: { label: () => t("t_warn"), text: () => "!", cls: "warn" }
   };
   const THAILAND = L.latLngBounds([5.4, 97.2], [20.6, 105.8]);
   const $ = s => document.querySelector(s);
@@ -10,9 +14,9 @@
 
   // ---------- профиль ----------
   const store = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
-  let guest = store.get("kunsabai.guest"); if (!guest) { guest = "Пользователь " + (10000 + Math.floor(Math.random() * 90000)); store.set("kunsabai.guest", guest); }
+  let guest = store.get("kunsabai.guest"); if (!guest) { guest = String(10000 + Math.floor(Math.random() * 90000)); store.set("kunsabai.guest", guest); }
   let nick = store.get("kunsabai.nick") || "";
-  const author = () => nick || guest;
+  const author = () => nick || t("guest") + " " + guest.replace(/\D/g, "");
   const mine = new Set(JSON.parse(store.get("kunsabai.mine") || "[]"));
   const addMine = id => { mine.add(id); store.set("kunsabai.mine", JSON.stringify([...mine].slice(-200))); };
 
@@ -60,7 +64,7 @@
     },
     async remove(id) {
       if (!live) { saveLocal(local().filter(x => x.id !== id)); return; }
-      if (!(await rest("rpc/delete_mark", { method: "POST", body: JSON.stringify({ mark_id: id }) }))) throw new Error("Удалить можно только свою метку");
+      if (!(await rest("rpc/delete_mark", { method: "POST", body: JSON.stringify({ mark_id: id }) }))) throw new Error(t("onlyOwn"));
     },
     async vote(id, yes) {
       if (!live) {
@@ -115,8 +119,8 @@
 
   const toast = (t, ms = 2500) => { const e = $("#toast"); e.textContent = t; e.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => e.hidden = true, ms); };
   const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const ago = iso => { const m = Math.max(0, Math.floor((Date.now() - new Date(iso)) / 60000)); if (m < 1) return "только что"; const h = Math.floor(m / 60); return (h ? h + " ч " : "") + (m % 60 || !h ? (m % 60) + " мин " : "") + "назад"; };
-  const when = iso => new Date(iso).toLocaleString("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const ago = iso => { const m = Math.max(0, Math.floor((Date.now() - new Date(iso)) / 60000)); if (m < 1) return t("justNow"); const h = Math.floor(m / 60); return (h ? h + " " + t("h") + " " : "") + (m % 60 || !h ? (m % 60) + " " + t("min") + " " : "") + t("ago"); };
+  const when = iso => new Date(iso).toLocaleString(t("locale"), { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", second: "2-digit" });
   const seenAt = m => m.last_confirm_at || m.created_at;
   const isOld = m => (m.last_deny_at && m.last_deny_at > seenAt(m)) || Date.now() - new Date(m.last_seen_at) > C.TTL_HOURS * 3600e3;
 
@@ -138,7 +142,7 @@
   }
   function addFlag(m) {
     const t = TYPES[m.type];
-    const icon = L.divIcon({ className: "", iconSize: [54, 38], iconAnchor: [27, 38], html: `<span class="flag ${t.cls} ${isOld(m) ? "old" : ""}">${t.text}</span>` });
+    const icon = L.divIcon({ className: "", iconSize: [54, 38], iconAnchor: [27, 38], html: `<span class="flag ${t.cls} ${isOld(m) ? "old" : ""}">${t.text()}</span>` });
     L.marker([m.lat, m.lng], { icon }).addTo(layer).on("click", e => { L.DomEvent.stopPropagation(e); openSheet(m.id); });
   }
   map.on("zoomend", () => render());
@@ -146,7 +150,7 @@
     const m = marks.find(x => x.id === id); if (!m) return closeSheet();
     current = id;
     $("#sNote").hidden = !m.note; $("#sNote span").textContent = m.note || "";
-    $("#sAuthor").textContent = (m.author || "Аноним") + (m.author_verified ? " ⭐" : "");
+    $("#sAuthor").textContent = (m.author || t("anon")) + (m.author_verified ? " ⭐" : "");
     $("#sSeen").textContent = ago(seenAt(m));
     $("#sGoneRow").hidden = !m.last_deny_at; $("#sGone").textContent = m.last_deny_at ? ago(m.last_deny_at) : "";
     $("#sAdded").textContent = `${when(m.created_at)} (${ago(m.created_at)})`;
@@ -158,51 +162,64 @@
   }
   function closeSheet() { current = null; $("#sheet").hidden = true; document.body.classList.remove("sheet-open"); }
 
-  async function refresh() { try { marks = await api.list(); render(); checkNear(); } catch (e) { if (!marks.length) { try { marks = JSON.parse(store.get("kunsabai.cache") || "[]"); render(); } catch {} } toast("Нет связи — показаны сохранённые метки"); } }
+  async function refresh() { try { marks = await api.list(); render(); checkNear(); } catch (e) { if (!marks.length) { try { marks = JSON.parse(store.get("kunsabai.cache") || "[]"); render(); } catch {} } toast(t("offline")); } }
   const loggedIn = () => live ? !isAnon() : !!nick;
   function openAuth() {
     $("#nick").value = nick; $("#email").value = ""; $("#code").value = "";
-    $("#emailRow").hidden = !live; $("#codeRow").hidden = true; $("#authOk").textContent = live ? "Получить код" : "Войти";
+    $("#emailRow").hidden = !live; $("#codeRow").hidden = true; $("#authOk").textContent = live ? t("getCode") : t("login");
     $("#authDlg").showModal();
   }
   async function vote(yes) {
     if (!loggedIn()) return openAuth();
     const id = current, k = "v." + id + "." + (live ? session.user.id : nick);
-    if (store.get(k)) return toast("Вы уже голосовали");
+    if (store.get(k)) return toast(t("voted"));
     try {
       const r = await api.vote(id, yes); store.set(k, "1");
-      toast(r === "already" ? "Вы уже голосовали" : yes ? "Спасибо, подтверждено" : "Спасибо, учтём"); refresh();
-    } catch (err) { toast(err.message || "Не удалось отправить"); }
+      toast(r === "already" ? t("voted") : yes ? t("thanksYes") : t("thanksNo")); refresh();
+    } catch (err) { toast(err.message || t("sendFail")); }
   }
   $("#authForm").onsubmit = async e => {
     if (e.submitter?.value !== "ok") return;
     e.preventDefault();
     const n = $("#nick").value.trim().slice(0, 20);
-    if (!n) return toast("Введите имя");
-    if (!live) { nick = n; store.set("kunsabai.nick", nick); $("#authDlg").close(); return toast("Вы вошли как " + nick); }
+    if (!n) return toast(t("enterName"));
+    if (!live) { nick = n; store.set("kunsabai.nick", nick); $("#authDlg").close(); return toast(t("loggedAs", nick)); }
     const email = $("#email").value.trim();
     try {
       if ($("#codeRow").hidden) {
-        if (!/^\S+@\S+\.\S+$/.test(email)) return toast("Введите e-mail");
-        await api.sendCode(email); $("#codeRow").hidden = false; $("#authOk").textContent = "Войти"; $("#code").focus();
-        return toast("Код отправлен на " + email, 4000);
+        if (!/^\S+@\S+\.\S+$/.test(email)) return toast(t("enterEmail"));
+        await api.sendCode(email); $("#codeRow").hidden = false; $("#authOk").textContent = t("login"); $("#code").focus();
+        return toast(t("codeSent", email), 4000);
       }
       await api.verify(email, $("#code").value.trim(), n);
-      nick = n; store.set("kunsabai.nick", nick); $("#authDlg").close(); toast("Вы вошли как " + nick);
-    } catch (err) { toast(err.message || "Ошибка входа"); }
+      nick = n; store.set("kunsabai.nick", nick); $("#authDlg").close(); toast(t("loggedAs", nick));
+    } catch (err) { toast(err.message || t("loginFail")); }
   };
 
   addEventListener("keydown", e => { if (e.key === "Escape" && current) closeSheet(); });
   $("#sDel").onclick = async () => {
-    if (!current || !confirm("Удалить вашу метку?")) return;
-    try { await api.remove(current); closeSheet(); toast("Метка удалена"); refresh(); } catch (err) { toast(err.message || "Не удалось удалить"); }
+    if (!current || !confirm(t("delAsk"))) return;
+    try { await api.remove(current); closeSheet(); toast(t("deleted")); refresh(); } catch (err) { toast(err.message || t("delFail")); }
   };
   $("#rYes").onclick = () => vote(true);
   $("#rNo").onclick = () => vote(false);
 
   // ---------- фильтры ----------
-  $("#filters").innerHTML = Object.entries(TYPES).map(([k, t]) => `<button class="chip on" data-k="${k}">${t.label}</button>`).join("");
-  $("#filters").onclick = e => { const b = e.target.closest(".chip"); if (!b) return; const k = b.dataset.k; active.has(k) ? active.delete(k) : active.add(k); b.classList.toggle("on"); render(); };
+  function buildChips() {
+    $("#filters").innerHTML = Object.entries(TYPES).map(([k, ty]) => `<button class="chip ${active.has(k) ? "on" : ""}" data-k="${k}">${ty.label()}</button>`).join("") + `<button class="chip on lang" id="lang">${lang.toUpperCase()}</button>`;
+    $("#typeGrid").innerHTML = Object.entries(TYPES).map(([k, ty]) => `<button type="button" data-k="${k}">${ty.label()}</button>`).join("");
+  }
+  function applyLang() {
+    document.documentElement.lang = lang; document.title = t("title");
+    document.querySelectorAll("[data-i18n]").forEach(e => e.textContent = t(e.dataset.i18n));
+    document.querySelectorAll("[data-i18n-ph]").forEach(e => e.placeholder = t(e.dataset.i18nPh));
+    buildChips(); render();
+  }
+  $("#filters").onclick = e => {
+    const b = e.target.closest(".chip"); if (!b) return;
+    if (b.id === "lang") { lang = LANGS[(LANGS.indexOf(lang) + 1) % LANGS.length]; store.set("kunsabai.lang", lang); return applyLang(); }
+    const k = b.dataset.k; active.has(k) ? active.delete(k) : active.add(k); b.classList.toggle("on"); render();
+  };
 
   // ---------- геолокация, «следовать», предупреждения ----------
   let watchId = null, follow = false, alertsOn = store.get("kunsabai.alerts") !== "0";
@@ -212,12 +229,12 @@
     meMarker ? meMarker.setLatLng(me) : meMarker = L.circleMarker(me, { radius: 8, color: "#fff", weight: 3, fillColor: "#3b82f6", fillOpacity: 1 }).addTo(map);
   }
   function locate(zoom = true) {
-    if (!navigator.geolocation) return toast("Геолокация недоступна");
+    if (!navigator.geolocation) return toast(t("noGeo"));
     navigator.geolocation.getCurrentPosition(p => {
       setMe(p);
-      if (zoom && !THAILAND.contains(me)) toast("Вы вне Таиланда — показываю как есть");
+      if (zoom && !THAILAND.contains(me)) toast(t("outside"));
       if (zoom) map.setView(me, 15);
-    }, () => zoom && toast("Не удалось определить позицию"), { enableHighAccuracy: true, timeout: 10000 });
+    }, () => zoom && toast(t("geoFail")), { enableHighAccuracy: true, timeout: 10000 });
   }
   function beep() {
     try { const ac = new (window.AudioContext || window.webkitAudioContext)(); [0, 0.25].forEach(t => { const o = ac.createOscillator(), g = ac.createGain(); o.frequency.value = 880; o.connect(g); g.connect(ac.destination); g.gain.setValueAtTime(0.3, ac.currentTime + t); g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + t + 0.2); o.start(ac.currentTime + t); o.stop(ac.currentTime + t + 0.2); }); } catch {}
@@ -231,7 +248,7 @@
       const d = me.distanceTo([m.lat, m.lng]);
       if (d > C.ALERT_RADIUS_M || now - (alerted.get(m.id) || 0) < 10 * 60e3) return;
       alerted.set(m.id, now); beep();
-      toast(`${m.type === "dps" ? "ДПС" : "Внимание"} рядом: ${Math.round(d / 10) * 10} м${m.note ? " — " + m.note : ""}`, 6000);
+      toast(t("near", TYPES[m.type].label(), Math.round(d / 10) * 10) + (m.note ? " — " + m.note : ""), 6000);
     });
   }
   function ensureWatch() {
@@ -239,40 +256,56 @@
     if (need && watchId == null && navigator.geolocation) watchId = navigator.geolocation.watchPosition(p => { setMe(p); if (follow) map.setView(me, Math.max(map.getZoom(), 15), { animate: true }); checkNear(); }, () => {}, { enableHighAccuracy: true, maximumAge: 5000 });
     if (!need && watchId != null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
   }
-  function setFollow(v) { follow = v; $("#follow").classList.toggle("on", v); ensureWatch(); if (v) { toast("Слежу за вашей позицией"); if (me) map.setView(me, Math.max(map.getZoom(), 15)); } }
+  function setFollow(v) { follow = v; $("#follow").classList.toggle("on", v); ensureWatch(); if (v) { toast(t("following")); if (me) map.setView(me, Math.max(map.getZoom(), 15)); } }
   function setAlerts(v) { alertsOn = v; store.set("kunsabai.alerts", v ? "1" : "0"); $("#alerts").textContent = v ? "🔔" : "🔕"; $("#alerts").classList.toggle("on", v); ensureWatch(); }
   map.on("dragstart", () => follow && setFollow(false));
   $("#locate").onclick = () => locate();
   $("#follow").onclick = () => setFollow(!follow);
-  $("#alerts").onclick = () => { setAlerts(!alertsOn); toast(alertsOn ? `Предупреждения включены (${C.ALERT_RADIUS_M} м)` : "Предупреждения выключены"); };
+  $("#alerts").onclick = () => { setAlerts(!alertsOn); toast(alertsOn ? t("alertsOn", C.ALERT_RADIUS_M) : t("alertsOff")); };
   setAlerts(alertsOn);
 
   // ---------- добавление ----------
   let selType = null;
-  $("#typeGrid").innerHTML = Object.entries(TYPES).map(([k, t]) => `<button type="button" data-k="${k}">${t.label}</button>`).join("");
   $("#typeGrid").onclick = e => { const b = e.target.closest("button"); if (!b) return; selType = b.dataset.k; [...$("#typeGrid").children].forEach(x => x.classList.toggle("sel", x === b)); };
-  map.on("click", e => { if (current) return closeSheet(); picked = e.latlng; toast("Точка выбрана — жмите ＋"); });
+  map.on("click", e => { if (current) return closeSheet(); picked = e.latlng; toast(t("picked")); });
   $("#add").onclick = () => { selType = null; $("#note").value = ""; [...$("#typeGrid").children].forEach(x => x.classList.remove("sel")); $("#addDlg").showModal(); };
   $("#addForm").onsubmit = async e => {
     if (e.submitter?.value !== "ok") return;
-    if (!selType) { e.preventDefault(); return toast("Выберите тип"); }
+    if (!selType) { e.preventDefault(); return toast(t("chooseType")); }
     const pos = picked || me || map.getCenter();
     picked = null;
     try {
       const m = await api.add({ type: selType, lat: +pos.lat.toFixed(6), lng: +pos.lng.toFixed(6), note: $("#note").value.trim().slice(0, 140) });
-      addMine(m.id); toast("Отметка поставлена"); await refresh(); map.setView([m.lat, m.lng], Math.max(map.getZoom(), 14));
-    } catch { toast("Не удалось поставить отметку"); }
+      addMine(m.id); toast(t("added_ok")); await refresh(); map.setView([m.lat, m.lng], Math.max(map.getZoom(), 14));
+    } catch { toast(t("addFail")); }
   };
 
-  // ---------- поиск (Nominatim, только Таиланд) ----------
+  // ---------- поиск: подсказки при вводе (Photon), по Enter — Nominatim; только Таиланд ----------
+  const sug = $("#sug");
+  const hideSug = () => { sug.hidden = true; sug.innerHTML = ""; };
+  const go = (lat, lng, z = 14) => { map.setView([lat, lng], z); hideSug(); document.activeElement.blur(); };
+  $("#q").addEventListener("input", () => {
+    clearTimeout(go.t); const q = $("#q").value.trim(); if (q.length < 3) return hideSug();
+    go.t = setTimeout(async () => {
+      try {
+        const r = await fetch(`https://photon.komoot.io/api/?limit=6&bbox=97.2,5.4,105.8,20.6&lang=${lang === "en" ? "en" : "default"}&q=${encodeURIComponent(q)}`);
+        const f = (await r.json()).features || [];
+        if ($("#q").value.trim() !== q) return;
+        sug.innerHTML = f.map((x, i) => { const p = x.properties; const sub = [p.city || p.county, p.state].filter(v => v && v !== p.name).join(", "); return `<li data-i="${i}"><b>${esc(p.name || p.street || "")}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</li>`; }).join("");
+        sug.hidden = !f.length;
+        sug.onclick = ev => { const li = ev.target.closest("li"); if (!li) return; const x = f[+li.dataset.i]; $("#q").value = x.properties.name || ""; go(x.geometry.coordinates[1], x.geometry.coordinates[0], x.properties.osm_key === "place" ? 13 : 16); };
+      } catch { hideSug(); }
+    }, 350);
+  });
+  map.on("movestart", hideSug);
   $("#search").onsubmit = async e => {
-    e.preventDefault(); const q = $("#q").value.trim(); if (!q) return;
+    e.preventDefault(); clearTimeout(go.t); const q = $("#q").value.trim(); if (!q) return;
     try {
-      const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=th&accept-language=ru&q=${encodeURIComponent(q)}`);
+      const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=th&accept-language=${lang}&q=${encodeURIComponent(q)}`);
       const j = await r.json();
-      if (!j.length) return toast("Ничего не найдено");
-      map.setView([+j[0].lat, +j[0].lon], 14); document.activeElement.blur();
-    } catch { toast("Поиск недоступен"); }
+      if (!j.length) return toast(t("notFound"));
+      go(+j[0].lat, +j[0].lon);
+    } catch { toast(t("searchFail")); }
   };
 
   // ---------- «Поделиться» (Android Web Share Target) ----------
@@ -281,7 +314,7 @@
     const s = [p.get("url"), p.get("text"), p.get("title")].filter(Boolean).join(" ");
     if (!s) return;
     const m = s.match(/(-?\d{1,2}\.\d+)[, ]+\s*(-?\d{2,3}\.\d+)/) || s.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
-    if (m) { picked = L.latLng(+m[1], +m[2]); map.setView(picked, 16); toast("Точка из «Поделиться» выбрана — жмите ＋", 4000); }
+    if (m) { picked = L.latLng(+m[1], +m[2]); map.setView(picked, 16); toast(t("sharePicked"), 4000); }
     history.replaceState(null, "", location.pathname);
   })();
 
@@ -293,13 +326,14 @@
   if (ios && !standalone) $("#install").hidden = false;
   $("#install").onclick = async () => {
     if (deferred) { deferred.prompt(); await deferred.userChoice; deferred = null; $("#install").hidden = true; return; }
-    $("#installText").innerHTML = ios ? "В Safari нажмите кнопку «Поделиться» (квадрат со стрелкой), затем «На экран “Домой”»." : "В меню браузера (⋮) выберите «Установить приложение» или «Добавить на главный экран».";
+    $("#installText").innerHTML = ios ? t("installIos") : t("installOther");
     $("#installDlg").showModal();
   };
   addEventListener("appinstalled", () => $("#install").hidden = true);
 
+  applyLang();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
-  if (!live) setTimeout(() => toast("Демо-режим: отметки только на этом устройстве", 4000), 800);
+  if (!live) setTimeout(() => toast(t("demo"), 4000), 800);
   locate(false); refresh(); setInterval(refresh, live ? 60000 : 30000); realtime(() => { clearTimeout(refresh.t); refresh.t = setTimeout(refresh, 300); });
   window.__kunsabai = { map, api, alerted };
 })();
