@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kunsabai — карта постов в Таиланде</title>
+<meta name="theme-color" content="#0f172a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Kunsabai">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="map"></div>
+
+<header class="top">
+  <form id="search" autocomplete="off">
+    <input id="q" type="search" placeholder="Поиск места в Таиланде" enterkeyhint="search">
+  </form>
+  <div id="filters" class="chips"></div>
+</header>
+
+<div class="fabs">
+  <button id="locate" class="fab" aria-label="Моя позиция">◎</button>
+  <button id="add" class="fab fab-main" aria-label="Добавить отметку">＋</button>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<!-- добавление отметки -->
+<dialog id="addDlg">
+  <form method="dialog" id="addForm">
+    <h3>Что отметить?</h3>
+    <div id="typeGrid" class="types"></div>
+    <label>Комментарий (необязательно)
+      <input id="note" maxlength="140" placeholder="например: у заправки, в сторону Пхукета">
+    </label>
+    <p class="hint">Отметка встанет на вашу текущую позицию. Нет GPS — тапните по карте, затем «＋».</p>
+    <div class="row">
+      <button value="cancel" class="btn">Отмена</button>
+      <button id="addOk" value="ok" class="btn btn-main">Поставить</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- подсказка установки -->
+<dialog id="installDlg">
+  <form method="dialog">
+    <h3>Установить на экран «Домой»</h3>
+    <p id="installText"></p>
+    <div class="row"><button class="btn btn-main" value="ok">Понятно</button></div>
+  </form>
+</dialog>
+
+<button id="install" class="install" hidden>Установить приложение</button>
+
+<script src="vendor/leaflet.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
