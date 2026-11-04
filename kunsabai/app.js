@@ -13,6 +13,8 @@
   let guest = store.get("kunsabai.guest"); if (!guest) { guest = "Пользователь " + (10000 + Math.floor(Math.random() * 90000)); store.set("kunsabai.guest", guest); }
   let nick = store.get("kunsabai.nick") || "";
   const author = () => nick || guest;
+  const mine = new Set(JSON.parse(store.get("kunsabai.mine") || "[]"));
+  const addMine = id => { mine.add(id); store.set("kunsabai.mine", JSON.stringify([...mine].slice(-200))); };
 
   // ---------- хранилище ----------
   const H = { apikey: C.SUPABASE_ANON_KEY, Authorization: "Bearer " + C.SUPABASE_ANON_KEY, "Content-Type": "application/json" };
@@ -34,6 +36,11 @@
       const r = await fetch(`${C.SUPABASE_URL}/rest/v1/marks`, { method: "POST", headers: { ...H, Prefer: "return=representation" }, body: JSON.stringify(m) });
       if (!r.ok) throw new Error("add " + r.status);
       return (await r.json())[0];
+    },
+    async remove(id) {
+      if (!live) { saveLocal(local().filter(x => x.id !== id)); return; }
+      const r = await fetch(`${C.SUPABASE_URL}/rest/v1/rpc/delete_mark`, { method: "POST", headers: H, body: JSON.stringify({ mark_id: id, who: marks.find(x => x.id === id)?.author || author() }) });
+      if (!r.ok) throw new Error("remove " + r.status);
     },
     async vote(id, yes) {
       if (!live) {
@@ -63,13 +70,25 @@
   let current = null;
   function render() {
     layer.clearLayers();
-    marks.filter(m => active.has(m.type) && TYPES[m.type]).forEach(m => {
-      const t = TYPES[m.type];
-      const icon = L.divIcon({ className: "", iconSize: [54, 38], iconAnchor: [27, 38], html: `<span class="flag ${t.cls} ${isOld(m) ? "old" : ""}">${t.text}</span>` });
-      L.marker([m.lat, m.lng], { icon }).addTo(layer).on("click", e => { L.DomEvent.stopPropagation(e); openSheet(m.id); });
-    });
+    const vis = marks.filter(m => active.has(m.type) && TYPES[m.type]);
+    if (map.getZoom() < C.CLUSTER_BELOW_ZOOM) {
+      const cells = new Map();
+      vis.forEach(m => { const p = map.project([m.lat, m.lng]); const k = Math.floor(p.x / 70) + ":" + Math.floor(p.y / 70); (cells.get(k) || cells.set(k, []).get(k)).push(m); });
+      for (const g of cells.values()) {
+        if (g.length === 1) { addFlag(g[0]); continue; }
+        const lat = g.reduce((s, m) => s + m.lat, 0) / g.length, lng = g.reduce((s, m) => s + m.lng, 0) / g.length;
+        const icon = L.divIcon({ className: "", iconSize: [40, 40], iconAnchor: [20, 20], html: `<span class="cluster">${g.length}</span>` });
+        L.marker([lat, lng], { icon }).addTo(layer).on("click", () => map.flyToBounds(L.latLngBounds(g.map(m => [m.lat, m.lng])).pad(0.3), { maxZoom: 14 }));
+      }
+    } else vis.forEach(addFlag);
     if (current) openSheet(current, true);
   }
+  function addFlag(m) {
+    const t = TYPES[m.type];
+    const icon = L.divIcon({ className: "", iconSize: [54, 38], iconAnchor: [27, 38], html: `<span class="flag ${t.cls} ${isOld(m) ? "old" : ""}">${t.text}</span>` });
+    L.marker([m.lat, m.lng], { icon }).addTo(layer).on("click", e => { L.DomEvent.stopPropagation(e); openSheet(m.id); });
+  }
+  map.on("zoomend", () => render());
   function openSheet(id, keep) {
     const m = marks.find(x => x.id === id); if (!m) return closeSheet();
     current = id;
@@ -81,11 +100,12 @@
     const fill = (b, n, by, at) => { b.querySelector(".cnt").textContent = n || ""; b.querySelector(".who").innerHTML = by ? `<b>${esc(by)}</b><br>${ago(at)}` : ""; };
     fill($("#rYes"), m.confirms, m.last_confirm_by, m.last_confirm_at);
     fill($("#rNo"), m.denies, m.last_deny_by, m.last_deny_at);
+    $("#sDel").hidden = !mine.has(m.id);
     $("#sheet").hidden = false; document.body.classList.add("sheet-open");
   }
   function closeSheet() { current = null; $("#sheet").hidden = true; document.body.classList.remove("sheet-open"); }
 
-  async function refresh() { try { marks = await api.list(); render(); } catch (e) { toast("Нет связи с сервером"); } }
+  async function refresh() { try { marks = await api.list(); render(); checkNear(); } catch (e) { toast("Нет связи с сервером"); } }
   async function vote(yes) {
     if (!nick) { $("#nick").value = ""; return $("#authDlg").showModal(); }
     const id = current, k = "v." + id + "." + nick;
@@ -94,6 +114,10 @@
     try { await api.vote(id, yes); toast(yes ? "Спасибо, подтверждено" : "Спасибо, учтём"); refresh(); } catch { toast("Не удалось отправить"); }
   }
   addEventListener("keydown", e => { if (e.key === "Escape" && current) closeSheet(); });
+  $("#sDel").onclick = async () => {
+    if (!current || !confirm("Удалить вашу метку?")) return;
+    try { await api.remove(current); closeSheet(); toast("Метка удалена"); refresh(); } catch { toast("Не удалось удалить"); }
+  };
   $("#rYes").onclick = () => vote(true);
   $("#rNo").onclick = () => vote(false);
   $("#authForm").onsubmit = e => {
@@ -107,17 +131,48 @@
   $("#filters").innerHTML = Object.entries(TYPES).map(([k, t]) => `<button class="chip on" data-k="${k}">${t.label}</button>`).join("");
   $("#filters").onclick = e => { const b = e.target.closest(".chip"); if (!b) return; const k = b.dataset.k; active.has(k) ? active.delete(k) : active.add(k); b.classList.toggle("on"); render(); };
 
-  // ---------- геолокация ----------
+  // ---------- геолокация, «следовать», предупреждения ----------
+  let watchId = null, follow = false, alertsOn = store.get("kunsabai.alerts") !== "0";
+  const alerted = new Map();
+  function setMe(p) {
+    me = L.latLng(p.coords.latitude, p.coords.longitude);
+    meMarker ? meMarker.setLatLng(me) : meMarker = L.circleMarker(me, { radius: 8, color: "#fff", weight: 3, fillColor: "#3b82f6", fillOpacity: 1 }).addTo(map);
+  }
   function locate(zoom = true) {
     if (!navigator.geolocation) return toast("Геолокация недоступна");
     navigator.geolocation.getCurrentPosition(p => {
-      me = L.latLng(p.coords.latitude, p.coords.longitude);
-      if (!THAILAND.contains(me)) toast("Вы вне Таиланда — показываю как есть");
-      meMarker ? meMarker.setLatLng(me) : meMarker = L.circleMarker(me, { radius: 8, color: "#fff", weight: 3, fillColor: "#3b82f6", fillOpacity: 1 }).addTo(map);
+      setMe(p);
+      if (zoom && !THAILAND.contains(me)) toast("Вы вне Таиланда — показываю как есть");
       if (zoom) map.setView(me, 15);
-    }, () => toast("Не удалось определить позицию"), { enableHighAccuracy: true, timeout: 10000 });
+    }, () => zoom && toast("Не удалось определить позицию"), { enableHighAccuracy: true, timeout: 10000 });
   }
+  function beep() {
+    try { const ac = new (window.AudioContext || window.webkitAudioContext)(); [0, 0.25].forEach(t => { const o = ac.createOscillator(), g = ac.createGain(); o.frequency.value = 880; o.connect(g); g.connect(ac.destination); g.gain.setValueAtTime(0.3, ac.currentTime + t); g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + t + 0.2); o.start(ac.currentTime + t); o.stop(ac.currentTime + t + 0.2); }); } catch {}
+    try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {}
+  }
+  function checkNear() {
+    if (!alertsOn || !me) return;
+    const now = Date.now();
+    marks.forEach(m => {
+      if (isOld(m) || !active.has(m.type)) return;
+      const d = me.distanceTo([m.lat, m.lng]);
+      if (d > C.ALERT_RADIUS_M || now - (alerted.get(m.id) || 0) < 10 * 60e3) return;
+      alerted.set(m.id, now); beep();
+      toast(`${m.type === "dps" ? "ДПС" : "Внимание"} рядом: ${Math.round(d / 10) * 10} м${m.note ? " — " + m.note : ""}`, 6000);
+    });
+  }
+  function ensureWatch() {
+    const need = follow || alertsOn;
+    if (need && watchId == null && navigator.geolocation) watchId = navigator.geolocation.watchPosition(p => { setMe(p); if (follow) map.setView(me, Math.max(map.getZoom(), 15), { animate: true }); checkNear(); }, () => {}, { enableHighAccuracy: true, maximumAge: 5000 });
+    if (!need && watchId != null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+  }
+  function setFollow(v) { follow = v; $("#follow").classList.toggle("on", v); ensureWatch(); if (v) { toast("Слежу за вашей позицией"); if (me) map.setView(me, Math.max(map.getZoom(), 15)); } }
+  function setAlerts(v) { alertsOn = v; store.set("kunsabai.alerts", v ? "1" : "0"); $("#alerts").textContent = v ? "🔔" : "🔕"; $("#alerts").classList.toggle("on", v); ensureWatch(); }
+  map.on("dragstart", () => follow && setFollow(false));
   $("#locate").onclick = () => locate();
+  $("#follow").onclick = () => setFollow(!follow);
+  $("#alerts").onclick = () => { setAlerts(!alertsOn); toast(alertsOn ? `Предупреждения включены (${C.ALERT_RADIUS_M} м)` : "Предупреждения выключены"); };
+  setAlerts(alertsOn);
 
   // ---------- добавление ----------
   let selType = null;
@@ -132,7 +187,7 @@
     picked = null;
     try {
       const m = await api.add({ type: selType, lat: +pos.lat.toFixed(6), lng: +pos.lng.toFixed(6), note: $("#note").value.trim().slice(0, 140) });
-      toast("Отметка поставлена"); await refresh(); map.setView([m.lat, m.lng], Math.max(map.getZoom(), 14));
+      addMine(m.id); toast("Отметка поставлена"); await refresh(); map.setView([m.lat, m.lng], Math.max(map.getZoom(), 14));
     } catch { toast("Не удалось поставить отметку"); }
   };
 
@@ -173,5 +228,5 @@
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
   if (!live) setTimeout(() => toast("Демо-режим: отметки только на этом устройстве", 4000), 800);
   locate(false); refresh(); setInterval(refresh, 30000);
-  window.__kunsabai = { map, api };
+  window.__kunsabai = { map, api, alerted };
 })();

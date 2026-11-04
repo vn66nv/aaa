@@ -1,0 +1,14 @@
+name: Kunsabai smoke test
+on:
+  push:
+    paths: ["kunsabai/**", "tests/**", ".github/workflows/test.yml"]
+  workflow_dispatch:
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm i --no-save playwright@1.48.2 && npx playwright install --with-deps chromium
+      - run: node tests/smoke.js

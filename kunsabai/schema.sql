@@ -30,3 +30,11 @@ begin
   end if;
 end $$;
 grant execute on function vote_mark(uuid, boolean, text) to anon;
+
+-- удаление своей метки (до подключения Supabase Auth проверяется по имени автора)
+create or replace function delete_mark(mark_id uuid, who text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  delete from marks where id = mark_id and author = who;
+end $$;
+grant execute on function delete_mark(uuid, text) to anon;

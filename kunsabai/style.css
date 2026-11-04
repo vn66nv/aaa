@@ -45,6 +45,11 @@ label input{display:block;width:100%;margin-top:4px;padding:10px;border-radius:1
 body.sheet-open .fabs{display:none}
 [hidden]{display:none!important}
 
+.fab.on{outline:3px solid var(--acc)}
+#follow{transform:rotate(-45deg)}
+.cluster{display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:#1d4ed8;color:#fff;font-weight:700;border:3px solid #fff;box-shadow:0 2px 8px #0007}
+.del{margin-top:10px;width:100%;padding:8px;border:0;background:none;color:#dc2626;font-size:14px;text-decoration:underline}
+
 /* ---------- полная (десктопная) версия ---------- */
 .brand{display:none}
 @media (min-width: 900px){
