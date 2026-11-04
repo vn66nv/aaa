@@ -32,6 +32,31 @@
 
 <div id="toast" class="toast" hidden></div>
 
+<!-- нижняя панель отметки (как в ГдеДПС) -->
+<section id="sheet" class="sheet" hidden>
+  <div class="srow" id="sNote"><i>💬</i><span></span></div>
+  <div class="srow"><i>👤</i><span><b>Автор:</b> <span id="sAuthor"></span></span></div>
+  <div class="srow"><i>👁</i><span><b>Подтверждено:</b> <span id="sSeen"></span></span></div>
+  <div class="srow" id="sGoneRow"><i>🙈</i><span><b>Сообщили что уже нет:</b> <span id="sGone"></span></span></div>
+  <div class="srow"><i>🕐</i><span><b>Добавлено:</b> <span id="sAdded"></span></span></div>
+  <div class="react">
+    <button id="rYes" class="rbtn"><div class="big"><span class="ic ok">✔</span> <span class="cnt"></span></div><div class="who"></div></button>
+    <button id="rNo" class="rbtn"><div class="big"><span class="ic no">✖</span> <span class="cnt"></span></div><div class="who"></div></button>
+  </div>
+</section>
+
+<!-- вход -->
+<dialog id="authDlg">
+  <form method="dialog" id="authForm">
+    <h3>Kunsabai</h3>
+    <p>Авторизуйтесь, чтобы оставлять реакции к меткам</p>
+    <label>Ваше имя
+      <input id="nick" maxlength="20" placeholder="например: Олег">
+    </label>
+    <div class="row"><button class="btn" value="cancel">ОК</button><button id="authOk" class="btn btn-main" value="ok">Войти</button></div>
+  </form>
+</dialog>
+
 <!-- добавление отметки -->
 <dialog id="addDlg">
   <form method="dialog" id="addForm">
