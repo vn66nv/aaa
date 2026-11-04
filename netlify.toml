@@ -1,0 +1,4 @@
+# Netlify: подключить репозиторий — сайт берётся из папки kunsabai, сборка не нужна
+[build]
+  publish = "kunsabai"
+  command = ""

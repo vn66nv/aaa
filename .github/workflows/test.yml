@@ -13,3 +13,4 @@ jobs:
       - run: npm i --no-save playwright@1.48.2 && npx playwright install --with-deps chromium
       - run: node tests/smoke.js
       - run: node tests/live-mock.js
+      - run: node tests/offline.js

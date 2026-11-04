@@ -2,9 +2,18 @@
 
 Карта постов, патрулей и камер в Таиланде. Статический PWA: Leaflet + OpenStreetMap, бэкенд — бесплатный Supabase (опционально).
 
-## Запуск
-Любой статический хостинг (GitHub Pages, Cloudflare Pages, Netlify) — папка `kunsabai` как корень. Локально: `python3 -m http.server` внутри папки.
-Без настройки работает демо-режим (отметки хранятся только на устройстве).
+## Запуск и хостинг (бесплатно)
+Сайт — статическая папка `kunsabai`, сборка не нужна. Локально: `python3 -m http.server` внутри папки.
+Без настройки Supabase работает демо-режим (отметки хранятся только на устройстве).
+
+- **GitHub Pages** (репозиторий должен быть публичным): Settings → Pages → Source: **GitHub Actions**. Публикует `.github/workflows/pages.yml`.
+- **Cloudflare Pages** (подходит для приватного репозитория): dash.cloudflare.com → Workers & Pages → Create → Pages → Connect to Git → репозиторий → Build command: пусто, Build output directory: `kunsabai`.
+- **Netlify** (тоже для приватного): app.netlify.com → Add new site → Import from Git → репозиторий. Настройки берутся из `netlify.toml`.
+
+Свой домен подключается потом в настройках выбранного хостинга.
+
+## Тесты
+`npm i --no-save playwright && node tests/smoke.js && node tests/live-mock.js && node tests/offline.js` — запускаются и в GitHub Actions.
 
 ## Общая база отметок и аккаунты (бесплатно, Supabase)
 1. Зарегистрироваться на https://supabase.com → **New project** (тариф Free, регион Singapore — ближе к Таиланду).
