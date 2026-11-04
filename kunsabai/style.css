@@ -44,3 +44,18 @@ label input{display:block;width:100%;margin-top:4px;padding:10px;border-radius:1
 .sheet ~ .fabs{bottom:calc(env(safe-area-inset-bottom) + 18px)}
 body.sheet-open .fabs{display:none}
 [hidden]{display:none!important}
+
+/* ---------- полная (десктопная) версия ---------- */
+.brand{display:none}
+@media (min-width: 900px){
+  .top{right:auto;width:400px;padding:16px 0 0 16px}
+  .brand{display:block;font-weight:800;font-size:20px;margin:0 0 8px 2px;text-shadow:0 1px 4px #000a}
+  .brand small{font-weight:400;font-size:13px;color:var(--mut);margin-left:6px}
+  .chips{flex-wrap:wrap;overflow:visible}
+  .sheet{left:16px;right:auto;bottom:auto;top:150px;width:400px;border-radius:14px;padding:16px}
+  body.sheet-open .fabs{display:flex}
+  .fabs{right:16px;bottom:24px}
+  .install{left:16px}
+  .rbtn:hover{background:#eef2f7;cursor:pointer}
+  .chip,.fab,.btn,.types button{cursor:pointer}
+}

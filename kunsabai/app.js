@@ -93,6 +93,7 @@
     store.set(k, "1");
     try { await api.vote(id, yes); toast(yes ? "Спасибо, подтверждено" : "Спасибо, учтём"); refresh(); } catch { toast("Не удалось отправить"); }
   }
+  addEventListener("keydown", e => { if (e.key === "Escape" && current) closeSheet(); });
   $("#rYes").onclick = () => vote(true);
   $("#rNo").onclick = () => vote(false);
   $("#authForm").onsubmit = e => {
