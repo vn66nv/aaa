@@ -17,6 +17,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? "✔ " : "✘ ") + m); if
     const u = new URL(r.request().url()), m = r.request().method(), auth = r.request().headers()["authorization"], body = r.request().postData() ? JSON.parse(r.request().postData()) : null;
     db.log.push(`${m} ${u.pathname} ${auth}`);
     const J = (o, s = 200) => r.fulfill({ status: s, contentType: "application/json", body: JSON.stringify(o) });
+    if (u.pathname === "/auth/v1/signup") await new Promise(z => setTimeout(z, 150));
     if (u.pathname === "/auth/v1/signup") return J({ access_token: "T_ANON", refresh_token: "R1", expires_in: 3600, user: user(true, "u-anon") });
     if (u.pathname === "/auth/v1/otp") { db.otpEmail = body.email; db.otpType = "email"; return J({}); }
     if (u.pathname === "/auth/v1/user" && m === "PUT") { if (body.email === "taken@b.co") return J({ msg: "already registered" }, 422); db.otpEmail = body.email; db.otpType = "email_change"; return J(user(true, "u-anon")); }
@@ -30,7 +31,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? "✔ " : "✘ ") + m); if
   });
   const p = await ctx.newPage(); const errs = []; p.on("pageerror", e => errs.push(e.message));
   await p.goto(base + "/index.html"); await p.waitForTimeout(800);
-  ok(db.log.some(l => l.startsWith("POST /auth/v1/signup")), "анонимная сессия создана при запуске");
+  ok(db.log.filter(l => l.startsWith("POST /auth/v1/signup")).length === 1, "при запуске создан ровно один гость");
   ok(db.log.some(l => l === "GET /rest/v1/marks Bearer T_ANON"), "метки запрашиваются с токеном сессии");
   await p.click("#add"); await p.click("#typeGrid button[data-k=dps]"); await p.click("#addOk"); await p.waitForTimeout(800);
   ok(db.marks.length === 1 && !("author" in JSON.parse(JSON.stringify(db.marks[0]))) === false, "метка сохранена в базе");

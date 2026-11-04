@@ -31,11 +31,13 @@
     if (!r.ok) throw new Error(j.msg || j.error_description || j.message || "auth " + r.status);
     return j;
   }
-  async function ensureSession() {
-    if (!live) return;
-    if (session && session.expires_at - 60 > Date.now() / 1000) return;
-    if (session?.refresh_token) { try { return saveSession(await authFetch("token?grant_type=refresh_token", { refresh_token: session.refresh_token })); } catch {} }
-    saveSession(await authFetch("signup", {}));   // анонимный пользователь
+  let sessionP = null;   // один запрос на всех: иначе при запуске создавалось бы два гостя
+  function ensureSession() {
+    if (!live || (session && session.expires_at - 60 > Date.now() / 1000)) return Promise.resolve();
+    return sessionP ||= (async () => {
+      if (session?.refresh_token) { try { return saveSession(await authFetch("token?grant_type=refresh_token", { refresh_token: session.refresh_token })); } catch {} }
+      saveSession(await authFetch("signup", {}));   // анонимный пользователь
+    })().finally(() => { sessionP = null; });
   }
   const headers = async () => { await ensureSession(); return { apikey: C.SUPABASE_ANON_KEY, Authorization: "Bearer " + (session?.access_token || C.SUPABASE_ANON_KEY), "Content-Type": "application/json" }; };
   async function rest(path, opt = {}) {
@@ -162,7 +164,11 @@
   }
   function closeSheet() { current = null; $("#sheet").hidden = true; document.body.classList.remove("sheet-open"); }
 
-  async function refresh() { try { marks = await api.list(); render(); checkNear(); } catch (e) { if (!marks.length) { try { marks = JSON.parse(store.get("kunsabai.cache") || "[]"); render(); } catch {} } toast(t("offline")); } }
+  let offline = false;
+  async function refresh() {
+    try { marks = await api.list(); offline = false; render(); checkNear(); }
+    catch (e) { if (!marks.length) { try { marks = JSON.parse(store.get("kunsabai.cache") || "[]"); render(); } catch {} } if (!offline) toast(t("offline")); offline = true; }
+  }
   const loggedIn = () => live ? !isAnon() : !!nick;
   function openAuth() {
     $("#nick").value = nick; $("#email").value = ""; $("#code").value = "";
