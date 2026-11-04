@@ -57,7 +57,13 @@
     <label>Ваше имя
       <input id="nick" maxlength="20" placeholder="например: Олег">
     </label>
-    <div class="row"><button class="btn" value="cancel">ОК</button><button id="authOk" class="btn btn-main" value="ok">Войти</button></div>
+    <label id="emailRow" hidden>E-mail
+      <input id="email" type="email" autocomplete="email" placeholder="you@example.com">
+    </label>
+    <label id="codeRow" hidden>Код из письма
+      <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="123456">
+    </label>
+    <div class="row"><button class="btn" value="cancel">Отмена</button><button id="authOk" class="btn btn-main" value="ok">Войти</button></div>
   </form>
 </dialog>
 

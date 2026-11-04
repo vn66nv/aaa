@@ -16,8 +16,32 @@
   const mine = new Set(JSON.parse(store.get("kunsabai.mine") || "[]"));
   const addMine = id => { mine.add(id); store.set("kunsabai.mine", JSON.stringify([...mine].slice(-200))); };
 
+  // ---------- сессия Supabase (анонимная → вход по e-mail коду) ----------
+  const SK = "kunsabai.session";
+  let session = (() => { try { return JSON.parse(store.get(SK) || "null"); } catch { return null; } })();
+  const saveSession = s => { session = s ? { access_token: s.access_token, refresh_token: s.refresh_token, expires_at: s.expires_at || Math.floor(Date.now() / 1000) + (s.expires_in || 3600), user: s.user } : null; store.set(SK, JSON.stringify(session)); };
+  const isAnon = () => !session || session.user?.is_anonymous !== false;
+  async function authFetch(path, body) {
+    const r = await fetch(`${C.SUPABASE_URL}/auth/v1/${path}`, { method: "POST", headers: { apikey: C.SUPABASE_ANON_KEY, "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.msg || j.error_description || j.message || "auth " + r.status);
+    return j;
+  }
+  async function ensureSession() {
+    if (!live) return;
+    if (session && session.expires_at - 60 > Date.now() / 1000) return;
+    if (session?.refresh_token) { try { return saveSession(await authFetch("token?grant_type=refresh_token", { refresh_token: session.refresh_token })); } catch {} }
+    saveSession(await authFetch("signup", {}));   // анонимный пользователь
+  }
+  const headers = async () => { await ensureSession(); return { apikey: C.SUPABASE_ANON_KEY, Authorization: "Bearer " + (session?.access_token || C.SUPABASE_ANON_KEY), "Content-Type": "application/json" }; };
+  async function rest(path, opt = {}) {
+    const r = await fetch(`${C.SUPABASE_URL}/rest/v1/${path}`, { ...opt, headers: { ...(await headers()), ...(opt.headers || {}) } });
+    const j = await r.json().catch(() => null);
+    if (!r.ok) throw new Error(j?.message || "rest " + r.status);
+    return j;
+  }
+
   // ---------- хранилище ----------
-  const H = { apikey: C.SUPABASE_ANON_KEY, Authorization: "Bearer " + C.SUPABASE_ANON_KEY, "Content-Type": "application/json" };
   const LS = "kunsabai.marks";
   const local = () => { try { return JSON.parse(localStorage.getItem(LS) || "[]"); } catch { return []; } };
   const saveLocal = a => store.set(LS, JSON.stringify(a));
@@ -26,32 +50,61 @@
     async list() {
       const since = new Date(Date.now() - C.HIDE_AFTER_HOURS * 3600e3).toISOString();
       if (!live) return local().filter(m => m.last_seen_at > since);
-      const r = await fetch(`${C.SUPABASE_URL}/rest/v1/marks?select=*&last_seen_at=gt.${since}&order=created_at.desc&limit=1000`, { headers: H });
-      if (!r.ok) throw new Error("list " + r.status);
-      return r.json();
+      const a = await rest(`marks?select=*&last_seen_at=gt.${since}&order=created_at.desc&limit=1000`);
+      try { store.set("kunsabai.cache", JSON.stringify(a)); } catch {}
+      return a;
     },
     async add(m) {
-      m = { ...m, author: author(), confirms: 0, denies: 0 };
-      if (!live) { const a = local(); const now = new Date().toISOString(); m = { ...m, id: crypto.randomUUID(), created_at: now, last_seen_at: now }; a.push(m); saveLocal(a); return m; }
-      const r = await fetch(`${C.SUPABASE_URL}/rest/v1/marks`, { method: "POST", headers: { ...H, Prefer: "return=representation" }, body: JSON.stringify(m) });
-      if (!r.ok) throw new Error("add " + r.status);
-      return (await r.json())[0];
+      if (!live) { const a = local(); const now = new Date().toISOString(); m = { ...m, author: author(), confirms: 0, denies: 0, id: crypto.randomUUID(), created_at: now, last_seen_at: now }; a.push(m); saveLocal(a); return m; }
+      return (await rest("marks", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify(m) }))[0];
     },
     async remove(id) {
       if (!live) { saveLocal(local().filter(x => x.id !== id)); return; }
-      const r = await fetch(`${C.SUPABASE_URL}/rest/v1/rpc/delete_mark`, { method: "POST", headers: H, body: JSON.stringify({ mark_id: id, who: marks.find(x => x.id === id)?.author || author() }) });
-      if (!r.ok) throw new Error("remove " + r.status);
+      if (!(await rest("rpc/delete_mark", { method: "POST", body: JSON.stringify({ mark_id: id }) }))) throw new Error("Удалить можно только свою метку");
     },
     async vote(id, yes) {
       if (!live) {
         const a = local(), m = a.find(x => x.id === id); if (!m) return; const now = new Date().toISOString();
         if (yes) { m.confirms++; m.last_confirm_by = author(); m.last_confirm_at = now; m.last_seen_at = now; } else { m.denies++; m.last_deny_by = author(); m.last_deny_at = now; }
-        saveLocal(a); return;
+        saveLocal(a); return "ok";
       }
-      const r = await fetch(`${C.SUPABASE_URL}/rest/v1/rpc/vote_mark`, { method: "POST", headers: H, body: JSON.stringify({ mark_id: id, is_yes: yes, voter: author() }) });
-      if (!r.ok) throw new Error("vote " + r.status);
+      return rest("rpc/vote_mark", { method: "POST", body: JSON.stringify({ mark_id: id, is_yes: yes }) });
+    },
+    // вход: шаг 1 — код на почту, шаг 2 — проверка кода и имя
+    // гость превращается в постоянный аккаунт (метки остаются его); если почта уже занята — обычный вход
+    async sendCode(email) {
+      this.otpType = "email";
+      if (session && isAnon()) {
+        const r = await fetch(`${C.SUPABASE_URL}/auth/v1/user`, { method: "PUT", headers: await headers(), body: JSON.stringify({ email }) });
+        if (r.ok) { this.otpType = "email_change"; return; }
+      }
+      await authFetch("otp", { email, create_user: true });
+    },
+    async verify(email, token, name) {
+      saveSession(await authFetch("verify", { type: this.otpType || "email", email, token }));
+      const uid = session.user.id;
+      await rest("profiles?on_conflict=id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ id: uid, name }) }).catch(async () => {
+        await rest(`profiles?id=eq.${uid}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ name }) });
+      });
     }
   };
+
+  // ---------- живое обновление (Supabase Realtime, протокол Phoenix) ----------
+  function realtime(onChange) {
+    if (!live || !("WebSocket" in window)) return;
+    let ws, hb, ref = 0;
+    const connect = async () => {
+      try { await ensureSession(); } catch {}
+      ws = new WebSocket(`${C.SUPABASE_URL.replace(/^http/, "ws")}/realtime/v1/websocket?apikey=${C.SUPABASE_ANON_KEY}&vsn=1.0.0`);
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ topic: "realtime:kunsabai", event: "phx_join", ref: String(++ref), payload: { config: { postgres_changes: [{ event: "*", schema: "public", table: "marks" }] }, access_token: session?.access_token } }));
+        hb = setInterval(() => ws.readyState === 1 && ws.send(JSON.stringify({ topic: "phoenix", event: "heartbeat", payload: {}, ref: String(++ref) })), 25000);
+      };
+      ws.onmessage = e => { try { if (JSON.parse(e.data).event === "postgres_changes") onChange(); } catch {} };
+      ws.onclose = () => { clearInterval(hb); setTimeout(connect, 5000); };
+    };
+    connect();
+  }
 
   // ---------- карта ----------
   const map = L.map("map", { zoomControl: false, maxBounds: THAILAND.pad(0.3), minZoom: 5, attributionControl: true }).fitBounds(THAILAND);
@@ -93,7 +146,7 @@
     const m = marks.find(x => x.id === id); if (!m) return closeSheet();
     current = id;
     $("#sNote").hidden = !m.note; $("#sNote span").textContent = m.note || "";
-    $("#sAuthor").textContent = m.author || "Аноним";
+    $("#sAuthor").textContent = (m.author || "Аноним") + (m.author_verified ? " ⭐" : "");
     $("#sSeen").textContent = ago(seenAt(m));
     $("#sGoneRow").hidden = !m.last_deny_at; $("#sGone").textContent = m.last_deny_at ? ago(m.last_deny_at) : "";
     $("#sAdded").textContent = `${when(m.created_at)} (${ago(m.created_at)})`;
@@ -105,27 +158,47 @@
   }
   function closeSheet() { current = null; $("#sheet").hidden = true; document.body.classList.remove("sheet-open"); }
 
-  async function refresh() { try { marks = await api.list(); render(); checkNear(); } catch (e) { toast("Нет связи с сервером"); } }
-  async function vote(yes) {
-    if (!nick) { $("#nick").value = ""; return $("#authDlg").showModal(); }
-    const id = current, k = "v." + id + "." + nick;
-    if (store.get(k)) return toast("Вы уже голосовали");
-    store.set(k, "1");
-    try { await api.vote(id, yes); toast(yes ? "Спасибо, подтверждено" : "Спасибо, учтём"); refresh(); } catch { toast("Не удалось отправить"); }
+  async function refresh() { try { marks = await api.list(); render(); checkNear(); } catch (e) { if (!marks.length) { try { marks = JSON.parse(store.get("kunsabai.cache") || "[]"); render(); } catch {} } toast("Нет связи — показаны сохранённые метки"); } }
+  const loggedIn = () => live ? !isAnon() : !!nick;
+  function openAuth() {
+    $("#nick").value = nick; $("#email").value = ""; $("#code").value = "";
+    $("#emailRow").hidden = !live; $("#codeRow").hidden = true; $("#authOk").textContent = live ? "Получить код" : "Войти";
+    $("#authDlg").showModal();
   }
+  async function vote(yes) {
+    if (!loggedIn()) return openAuth();
+    const id = current, k = "v." + id + "." + (live ? session.user.id : nick);
+    if (store.get(k)) return toast("Вы уже голосовали");
+    try {
+      const r = await api.vote(id, yes); store.set(k, "1");
+      toast(r === "already" ? "Вы уже голосовали" : yes ? "Спасибо, подтверждено" : "Спасибо, учтём"); refresh();
+    } catch (err) { toast(err.message || "Не удалось отправить"); }
+  }
+  $("#authForm").onsubmit = async e => {
+    if (e.submitter?.value !== "ok") return;
+    e.preventDefault();
+    const n = $("#nick").value.trim().slice(0, 20);
+    if (!n) return toast("Введите имя");
+    if (!live) { nick = n; store.set("kunsabai.nick", nick); $("#authDlg").close(); return toast("Вы вошли как " + nick); }
+    const email = $("#email").value.trim();
+    try {
+      if ($("#codeRow").hidden) {
+        if (!/^\S+@\S+\.\S+$/.test(email)) return toast("Введите e-mail");
+        await api.sendCode(email); $("#codeRow").hidden = false; $("#authOk").textContent = "Войти"; $("#code").focus();
+        return toast("Код отправлен на " + email, 4000);
+      }
+      await api.verify(email, $("#code").value.trim(), n);
+      nick = n; store.set("kunsabai.nick", nick); $("#authDlg").close(); toast("Вы вошли как " + nick);
+    } catch (err) { toast(err.message || "Ошибка входа"); }
+  };
+
   addEventListener("keydown", e => { if (e.key === "Escape" && current) closeSheet(); });
   $("#sDel").onclick = async () => {
     if (!current || !confirm("Удалить вашу метку?")) return;
-    try { await api.remove(current); closeSheet(); toast("Метка удалена"); refresh(); } catch { toast("Не удалось удалить"); }
+    try { await api.remove(current); closeSheet(); toast("Метка удалена"); refresh(); } catch (err) { toast(err.message || "Не удалось удалить"); }
   };
   $("#rYes").onclick = () => vote(true);
   $("#rNo").onclick = () => vote(false);
-  $("#authForm").onsubmit = e => {
-    if (e.submitter?.value !== "ok") return;
-    const n = $("#nick").value.trim();
-    if (!n) { e.preventDefault(); return toast("Введите имя"); }
-    nick = n.slice(0, 20); store.set("kunsabai.nick", nick); toast("Вы вошли как " + nick);
-  };
 
   // ---------- фильтры ----------
   $("#filters").innerHTML = Object.entries(TYPES).map(([k, t]) => `<button class="chip on" data-k="${k}">${t.label}</button>`).join("");
@@ -227,6 +300,6 @@
 
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
   if (!live) setTimeout(() => toast("Демо-режим: отметки только на этом устройстве", 4000), 800);
-  locate(false); refresh(); setInterval(refresh, 30000);
+  locate(false); refresh(); setInterval(refresh, live ? 60000 : 30000); realtime(() => { clearTimeout(refresh.t); refresh.t = setTimeout(refresh, 300); });
   window.__kunsabai = { map, api, alerted };
 })();
