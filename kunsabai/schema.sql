@@ -100,3 +100,6 @@ grant execute on function delete_mark(uuid) to authenticated;
 
 -- ---------- живое обновление ----------
 alter publication supabase_realtime add table marks;
+
+-- ---------- автоочистка (необязательно): Database → Extensions → включить pg_cron, затем выполнить ----------
+-- select cron.schedule('kunsabai-cleanup', '17 * * * *', $$ delete from marks where last_seen_at < now() - interval '2 days' $$);

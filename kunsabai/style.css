@@ -68,3 +68,5 @@ body.sheet-open .fabs{display:none}
   .rbtn:hover{background:#eef2f7;cursor:pointer}
   .chip,.fab,.btn,.types button{cursor:pointer}
 }
+
+.rbtn.mine{border:2px solid #f59e0b;background:#fffbeb}

@@ -114,7 +114,14 @@
 
   // ---------- карта ----------
   const map = L.map("map", { zoomControl: false, maxBounds: THAILAND.pad(0.3), minZoom: 5, attributionControl: true }).fitBounds(THAILAND);
-  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
+  // тайлы: OpenStreetMap, при сбоях — запасной бесплатный источник CARTO
+  let tileErr = 0;
+  const osm = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
+  osm.on("tileerror", () => {
+    if (++tileErr !== 4) return;
+    map.removeLayer(osm);
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", { maxZoom: 19, subdomains: "abcd", attribution: "© OpenStreetMap © CARTO" }).addTo(map);
+  });
   L.control.zoom({ position: "topright" }).addTo(map);
   const layer = L.layerGroup().addTo(map);
   let marks = [], active = new Set(Object.keys(TYPES)), me = null, meMarker = null, picked = null;
@@ -159,6 +166,8 @@
     const fill = (b, n, by, at) => { b.querySelector(".cnt").textContent = n || ""; b.querySelector(".who").innerHTML = by ? `<b>${esc(by)}</b><br>${ago(at)}` : ""; };
     fill($("#rYes"), m.confirms, m.last_confirm_by, m.last_confirm_at);
     fill($("#rNo"), m.denies, m.last_deny_by, m.last_deny_at);
+    const my = store.get(voteKey(m.id));
+    $("#rYes").classList.toggle("mine", my === "yes"); $("#rNo").classList.toggle("mine", my === "no");
     $("#sDel").hidden = !mine.has(m.id);
     $("#sheet").hidden = false; document.body.classList.add("sheet-open");
   }
@@ -170,6 +179,7 @@
     catch (e) { if (!marks.length) { try { marks = JSON.parse(store.get("kunsabai.cache") || "[]"); render(); } catch {} } if (!offline) toast(t("offline")); offline = true; }
   }
   const loggedIn = () => live ? !isAnon() : !!nick;
+  const voteKey = id => "v." + id + "." + (live ? session?.user?.id : nick);
   function openAuth() {
     $("#nick").value = nick; $("#email").value = ""; $("#code").value = "";
     $("#emailRow").hidden = !live; $("#codeRow").hidden = true; $("#authOk").textContent = live ? t("getCode") : t("login");
@@ -177,10 +187,10 @@
   }
   async function vote(yes) {
     if (!loggedIn()) return openAuth();
-    const id = current, k = "v." + id + "." + (live ? session.user.id : nick);
+    const id = current, k = voteKey(id);
     if (store.get(k)) return toast(t("voted"));
     try {
-      const r = await api.vote(id, yes); store.set(k, "1");
+      const r = await api.vote(id, yes); store.set(k, yes ? "yes" : "no");
       toast(r === "already" ? t("voted") : yes ? t("thanksYes") : t("thanksNo")); refresh();
     } catch (err) { toast(err.message || t("sendFail")); }
   }

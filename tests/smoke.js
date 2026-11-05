@@ -31,6 +31,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? "✔ " : "✘ ") + m); if
     await p.click("#rYes"); ok(await p.evaluate(() => document.querySelector("#authDlg").open), `${vp.name}: без входа просит авторизоваться`);
     await p.fill("#nick", "Tester"); await p.click("#authOk"); await p.click("#rYes"); await p.waitForTimeout(500);
     ok((await p.textContent("#rYes")).includes("1") && (await p.textContent("#rYes")).includes("Tester"), `${vp.name}: голос ✔ засчитан с именем`);
+    ok(await p.evaluate(() => document.querySelector("#rYes").classList.contains("mine")), `${vp.name}: своя реакция подсвечена`);
     await p.click("#rYes"); await p.waitForTimeout(200); ok((await p.textContent("#toast")).includes("уже"), `${vp.name}: повторный голос запрещён`);
     // предупреждение рядом (мы стоим в той же точке)
     await p.reload(); await p.waitForTimeout(1500);
