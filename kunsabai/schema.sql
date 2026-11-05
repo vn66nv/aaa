@@ -1,4 +1,4 @@
--- Kunsabai — схема Supabase. Выполнить целиком в Supabase → SQL Editor.
+-- Kunsabai — схема Supabase. Выполнить целиком в Supabase → SQL Editor (можно запускать повторно).
 -- Перед этим: Authentication → Sign In / Providers → включить «Allow anonymous sign-ins» и Email (OTP).
 
 -- ---------- профили ----------
@@ -9,8 +9,11 @@ create table if not exists profiles (
   created_at timestamptz not null default now()
 );
 alter table profiles enable row level security;
+drop policy if exists "profiles read" on profiles;
 create policy "profiles read"   on profiles for select using (true);
+drop policy if exists "profiles insert" on profiles;
 create policy "profiles insert" on profiles for insert with check (id = auth.uid() and verified = false);
+drop policy if exists "profiles update" on profiles;
 create policy "profiles update" on profiles for update using (id = auth.uid());
 revoke update on profiles from anon, authenticated;
 grant update (name) on profiles to authenticated;
@@ -40,7 +43,9 @@ create table if not exists marks (
 create index if not exists marks_seen on marks (last_seen_at desc);
 create index if not exists marks_user on marks (user_id, created_at desc);
 alter table marks enable row level security;
+drop policy if exists "marks read" on marks;
 create policy "marks read"   on marks for select using (true);
+drop policy if exists "marks insert" on marks;
 create policy "marks insert" on marks for insert with check (auth.uid() is not null and user_id = auth.uid() and confirms = 0 and denies = 0);
 
 -- автор, проверка и антиспам на сервере
@@ -67,6 +72,7 @@ create table if not exists votes (
   primary key (mark_id, user_id)
 );
 alter table votes enable row level security;
+drop policy if exists "votes own read" on votes;
 create policy "votes own read" on votes for select using (user_id = auth.uid());
 
 create or replace function vote_mark(mark_id uuid, is_yes boolean) returns text
@@ -99,7 +105,11 @@ revoke execute on function delete_mark(uuid) from public, anon;
 grant execute on function delete_mark(uuid) to authenticated;
 
 -- ---------- живое обновление ----------
-alter publication supabase_realtime add table marks;
+do $$ begin
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'marks') then
+    alter publication supabase_realtime add table marks;
+  end if;
+end $$;
 
 -- ---------- автоочистка (необязательно): Database → Extensions → включить pg_cron, затем выполнить ----------
 -- select cron.schedule('kunsabai-cleanup', '17 * * * *', $$ delete from marks where last_seen_at < now() - interval '2 days' $$);

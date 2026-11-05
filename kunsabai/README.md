@@ -13,7 +13,8 @@
 Свой домен подключается потом в настройках выбранного хостинга.
 
 ## Тесты
-`npm i --no-save playwright && node tests/smoke.js && node tests/live-mock.js && node tests/offline.js` — запускаются и в GitHub Actions.
+`npm i --no-save playwright && node tests/smoke.js && node tests/live-mock.js && node tests/offline.js` — интерфейс.
+`tests/schema.sh` — правила базы на PostgreSQL (нужны переменные PGHOST/PGPORT/PGUSER). Всё запускается и в GitHub Actions.
 
 ## Общая база отметок и аккаунты (бесплатно, Supabase)
 1. Зарегистрироваться на https://supabase.com → **New project** (тариф Free, регион Singapore — ближе к Таиланду).
