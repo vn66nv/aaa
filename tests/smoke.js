@@ -10,7 +10,8 @@ let fails = 0; const ok = (c, m) => { console.log((c ? "✔ " : "✘ ") + m); if
   const b = await chromium.launch();
   for (const vp of [{ width: 390, height: 800, name: "mobile" }, { width: 1440, height: 900, name: "desktop" }]) {
     const ctx = await b.newContext({ locale: "ru-RU", viewport: vp, geolocation: { latitude: 13.7563, longitude: 100.5018 }, permissions: ["geolocation"], serviceWorkers: "block" });
-    await ctx.route(/tile\.openstreetmap|nominatim/, r => r.abort());
+    await ctx.route(/tile\.openstreetmap|nominatim|supabase\.co/, r => r.abort());
+    await ctx.route(/\/config\.js$/, r => r.fulfill({ contentType: "text/javascript", body: `window.KUNSABAI={SUPABASE_URL:"",SUPABASE_ANON_KEY:"",TTL_HOURS:3,HIDE_AFTER_HOURS:12,ALERT_RADIUS_M:500,CLUSTER_BELOW_ZOOM:11};` }));
     await ctx.route(/photon\.komoot\.io/, r => r.fulfill({ contentType: "application/json", body: JSON.stringify({ features: [{ geometry: { coordinates: [98.2963, 7.8961] }, properties: { name: "Patong", state: "Phuket", osm_key: "place" } }] }) }));
     const p = await ctx.newPage(); const errs = []; p.on("pageerror", e => errs.push(e.message));
     await p.goto(base); await p.waitForTimeout(800);

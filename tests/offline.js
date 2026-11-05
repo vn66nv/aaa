@@ -9,7 +9,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? "✔ " : "✘ ") + m); if
   await new Promise(r => srv.listen(0, r)); const base = `http://localhost:${srv.address().port}/index.html`;
   const b = await chromium.launch(); const ctx = await b.newContext({ locale: "ru-RU" });
   const carto = []; await ctx.route(/cartocdn/, r => { carto.push(r.request().url()); r.abort(); });
-  await ctx.route(/tile\.openstreetmap|nominatim|photon/, r => r.abort());
+  await ctx.route(/tile\.openstreetmap|nominatim|photon|supabase\.co/, r => r.abort());
   const p = await ctx.newPage(); await p.goto(base); await p.waitForTimeout(2500);
   const cdp = await ctx.newCDPSession(p);
   ok(carto.length > 0, "при сбое тайлов OSM карта переключилась на CARTO");

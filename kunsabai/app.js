@@ -39,7 +39,8 @@
       saveSession(await authFetch("signup", {}));   // анонимный пользователь
     })().finally(() => { sessionP = null; });
   }
-  const headers = async () => { await ensureSession(); return { apikey: C.SUPABASE_ANON_KEY, Authorization: "Bearer " + (session?.access_token || C.SUPABASE_ANON_KEY), "Content-Type": "application/json" }; };
+  // publishable-ключ (sb_publishable_…) — не JWT: в Authorization идёт только токен пользователя
+  const headers = async () => { await ensureSession(); const h = { apikey: C.SUPABASE_ANON_KEY, "Content-Type": "application/json" }; if (session?.access_token) h.Authorization = "Bearer " + session.access_token; return h; };
   async function rest(path, opt = {}) {
     const r = await fetch(`${C.SUPABASE_URL}/rest/v1/${path}`, { ...opt, headers: { ...(await headers()), ...(opt.headers || {}) } });
     const j = await r.json().catch(() => null);
